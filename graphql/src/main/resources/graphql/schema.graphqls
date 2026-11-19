@@ -1,0 +1,59 @@
+# The SDL schema: the contract of the GraphQL API.
+# "!" means the value can never be null. "[Parcel!]!" is a list of parcels.
+
+type Query {
+    # One customer by email. Routed to exactly one shard. Null if not found.
+    customer(email: String!): Customer
+
+    # All customers. Asks all 3 shards and merges the answers.
+    customers: [Customer!]!
+}
+
+type Mutation {
+    # Checks username + password and returns a bearer token.
+    login(username: String!, password: String!): String!
+
+    # Deletes the token that was sent in the Authorization header.
+    logout: Boolean!
+
+    # The mutations below need "Authorization: Bearer <token>".
+
+    # Stores a new customer in the shard chosen by the hash of the email.
+    registerCustomer(name: String!, email: String!, city: String!): Customer!
+
+    # Stores a new parcel in the same shard as its customer.
+    createParcel(customerEmail: String!, description: String!, weightKg: Float!): Parcel!
+
+    # Runs the ETL process: copies the data of all shards into the warehouse.
+    runEtl: EtlResult!
+}
+
+type Customer {
+    # The id is only unique inside one shard (two shards can both have id 1).
+    id: ID!
+    # The shard (0, 1 or 2) where this customer is stored.
+    shard: Int!
+    email: String!
+    name: String!
+    city: String!
+    # The customer's parcels. Only fetched if the client asks for this field.
+    parcels: [Parcel!]!
+}
+
+type Parcel {
+    id: ID!
+    description: String!
+    weightKg: Float!
+    status: String!
+    createdAt: String!
+}
+
+# Summary of one ETL run.
+type EtlResult {
+    # Rows read from the shards in this run.
+    customersExtracted: Int!
+    parcelsExtracted: Int!
+    # Rows in the warehouse after the run. Stays the same when the ETL is run again.
+    warehouseCustomers: Int!
+    warehouseParcels: Int!
+}

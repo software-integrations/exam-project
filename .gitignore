@@ -1,0 +1,9 @@
+# Maven build output
+target/
+# H2 database files (recreated on every start)
+data/
+# IDE files
+.idea/
+*.iml
+.vscode/
+.DS_Store

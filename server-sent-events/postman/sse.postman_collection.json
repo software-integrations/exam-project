@@ -1,0 +1,414 @@
+{
+  "info": {
+    "_postman_id": "dc22b2c7-7fde-51cd-a3e8-859df01e9479",
+    "name": "Delivery SSE API",
+    "description": "Start the API first (port 8086). Restart the API to reset the data. The 'Live stream' request is for manual demos: it never ends, so skip it in the collection runner.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Event stream (GET)",
+      "item": [
+        {
+          "name": "Stream of a delivered delivery (positive)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "text/event-stream"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/deliveries/3/events",
+            "description": "Delivery 3 is already delivered, so the server sends one 'status' event and closes the stream.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Content-Type is text/event-stream\", function () {",
+                  "    pm.expect(pm.response.headers.get('Content-Type')).to.include('text/event-stream');",
+                  "});",
+                  "pm.test(\"Body is in the SSE wire format\", function () {",
+                  "    const body = pm.response.text();",
+                  "    pm.expect(body).to.include('event:status');",
+                  "    pm.expect(body).to.include('data:{');",
+                  "    pm.expect(body).to.include('\"status\":\"DELIVERED\"');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Stream of an unknown delivery (negative)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "text/event-stream"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/deliveries/9999/events",
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 404\", function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});",
+                  "pm.test(\"Error says what is wrong\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.detail).to.eql('Delivery 9999 not found');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Report location (POST)",
+      "item": [
+        {
+          "name": "Report location - in transit (positive)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/deliveries/1/locations",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"lat\": 55.68,\n  \"lng\": 12.56\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test(\"Courier is still far away\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.deliveryId).to.eql(1);",
+                  "    pm.expect(json.status).to.eql('IN_TRANSIT');",
+                  "    pm.expect(json.distanceKm).to.be.above(1);",
+                  "    pm.collectionVariables.set('lastEventId', json.id);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Report location - near destination (positive)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/deliveries/1/locations",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"lat\": 55.6895,\n  \"lng\": 12.551\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test(\"Courier is arriving\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.status).to.eql('ARRIVING');",
+                  "    pm.expect(json.distanceKm).to.be.below(1);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Report invalid latitude (negative)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/deliveries/1/locations",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"lat\": 123,\n  \"lng\": 12.56\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 400\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "pm.test(\"Error explains the valid range\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.detail).to.include('lat must be between');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Report location without lng (negative)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/deliveries/1/locations",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"lat\": 55.68\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 400\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Report location for unknown delivery (negative)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/deliveries/9999/locations",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"lat\": 55.68,\n  \"lng\": 12.56\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 404\", function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Report location for delivered delivery (negative)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/deliveries/3/locations",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"lat\": 55.68,\n  \"lng\": 12.56\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 409\", function () {",
+                  "    pm.response.to.have.status(409);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Report location as text/plain (negative, CSRF protection)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/plain"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/deliveries/1/locations",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "lat=55.68&lng=12.56",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 415\", function () {",
+                  "    pm.response.to.have.status(415);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Manual demo (never ends - do not use in the runner)",
+      "item": [
+        {
+          "name": "Live stream of delivery 1 (manual demo)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "text/event-stream"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/deliveries/1/events",
+            "description": "Stays open (not for the collection runner). Send it in one tab, then send the POST requests in another tab and watch the events arrive.",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8086"
+    },
+    {
+      "key": "lastEventId",
+      "value": ""
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+// The contract of the gRPC API, written in Protocol Buffers (version 3).
+// Maven generates Java classes from this file (see protobuf-maven-plugin in pom.xml).
+syntax = "proto3";
+
+// Protobuf package: part of the full service name delivery.tracking.v1.TrackingService
+package delivery.tracking.v1;
+
+// Where the generated Java classes go, one file per message.
+option java_package = "dk.ek.delivery.grpc.proto";
+option java_multiple_files = true;
+
+service TrackingService {
+  // Unary RPC: one request, one response.
+  rpc GetDeliveryStatus (DeliveryStatusRequest) returns (DeliveryStatusResponse);
+
+  // Bidirectional streaming RPC: the courier app sends many locations,
+  // and the server answers each one with a tracking update, on the same connection.
+  rpc TrackDelivery (stream LocationUpdate) returns (stream TrackingUpdate);
+}
+
+// The numbers (= 1, = 2, ...) are field tags. They identify the field in the
+// binary message, so they must never change once the API is in use.
+
+message DeliveryStatusRequest {
+  int64 delivery_id = 1;
+}
+
+message DeliveryStatusResponse {
+  int64 delivery_id = 1;
+  string recipient = 2;
+  string address = 3;
+  string status = 4;             // PENDING, IN_TRANSIT, ARRIVING or DELIVERED
+  optional double last_lat = 5;  // optional: not set until the courier has sent a location
+  optional double last_lng = 6;
+  string updated_at = 7;
+}
+
+// One GPS position sent by the courier.
+message LocationUpdate {
+  int64 delivery_id = 1;
+  double lat = 2;
+  double lng = 3;
+}
+
+// The server's answer to one LocationUpdate.
+message TrackingUpdate {
+  int64 delivery_id = 1;
+  string status = 2;       // IN_TRANSIT, ARRIVING or DELIVERED
+  double distance_km = 3;  // distance left to the destination
+  string message = 4;      // text for humans
+}
