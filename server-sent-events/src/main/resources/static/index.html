@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Delivery tracking - SSE demo</title>
+    <style>
+        body { font-family: sans-serif; max-width: 700px; margin: 2rem auto; padding: 0 1rem; }
+        #log { background: #f4f4f4; padding: 1rem; height: 260px; overflow-y: auto; white-space: pre-wrap; }
+        input { width: 7rem; }
+    </style>
+</head>
+<body>
+<h1>Delivery tracking (Server-Sent Events)</h1>
+
+<!-- Customer side: listen to the event stream -->
+<p>
+    Delivery id <input id="deliveryId" type="number" value="1">
+    <button id="connect">Connect</button>
+    <button id="disconnect">Disconnect</button>
+    <b id="state">not connected</b>
+</p>
+
+<!-- Courier side: report a position (this creates an event) -->
+<p>
+    lat <input id="lat" value="55.6800"> lng <input id="lng" value="12.5600">
+    <button id="send">Send location</button>
+</p>
+<p>Try 55.6895 / 12.5510 (arriving) and 55.6900 / 12.5500 (delivered).</p>
+
+<div id="log"></div>
+
+<script>
+    const base = "/api/v1/deliveries/";
+    let source = null; // the EventSource object = one open SSE connection
+
+    // Adds a line to the log. textContent (never innerHTML) -> text from the server
+    // is shown as plain text and can never run as HTML or script (XSS protection).
+    function log(text) {
+        const line = document.createElement("div");
+        line.textContent = new Date().toLocaleTimeString() + "  " + text;
+        document.getElementById("log").prepend(line);
+    }
+
+    function setState(text) {
+        document.getElementById("state").textContent = text;
+    }
+
+    // Closes the connection. Without close() the browser reconnects by itself.
+    function disconnect() {
+        if (source) {
+            source.close();
+            source = null;
+            setState("closed");
+        }
+    }
+
+    document.getElementById("connect").onclick = () => {
+        disconnect();
+        const id = document.getElementById("deliveryId").value;
+
+        // new EventSource(url) opens a GET request with "Accept: text/event-stream".
+        source = new EventSource(base + id + "/events");
+
+        // onopen: the connection is ready.
+        source.onopen = () => setState("connected");
+
+        // Named events ("event:status" in the stream) are read with addEventListener.
+        // event.data is the text after "data:", event.lastEventId is the text after "id:".
+        source.addEventListener("status", event => {
+            const delivery = JSON.parse(event.data);
+            log("STATUS    " + delivery.status + " - to " + delivery.recipient + ", " + delivery.address);
+            if (delivery.status === "DELIVERED") disconnect(); // nothing more will come
+        });
+
+        source.addEventListener("location", event => {
+            const update = JSON.parse(event.data);
+            log("LOCATION  #" + event.lastEventId + " " + update.status + " - " + update.message);
+        });
+
+        source.addEventListener("delivered", () => {
+            log("DELIVERED - the server closes the stream");
+            disconnect(); // stop the automatic reconnect
+        });
+
+        // onerror: the connection was lost. The browser retries by itself and sends
+        // the header "Last-Event-ID", so the server can replay what we missed.
+        source.onerror = () => {
+            if (source) setState(source.readyState === EventSource.CONNECTING ? "reconnecting..." : "closed");
+        };
+    };
+
+    document.getElementById("disconnect").onclick = disconnect;
+
+    // SSE only goes from server to client. To send data we use a normal POST request.
+    document.getElementById("send").onclick = async () => {
+        const id = document.getElementById("deliveryId").value;
+        const response = await fetch(base + id + "/locations", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({
+                lat: Number(document.getElementById("lat").value),
+                lng: Number(document.getElementById("lng").value)
+            })
+        });
+        if (!response.ok) {
+            const problem = await response.json();
+            log("POST failed: " + response.status + " " + problem.detail);
+        }
+    };
+</script>
+</body>
+</html>

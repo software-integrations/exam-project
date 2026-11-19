@@ -1,0 +1,985 @@
+{
+  "info": {
+    "_postman_id": "763b1d5e-618c-5628-9582-f4f3b296e47b",
+    "name": "Delivery GraphQL API + ETL",
+    "description": "Run the folders in order on a freshly started API (restart the API to reset the data). GraphQL always answers HTTP 200; errors are in the 'errors' list.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Queries (public)",
+      "item": [
+        {
+          "name": "customers - all shards",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/graphql",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"{ customers { id shard email name } }\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"9 customers, spread over all 3 shards\", function () {",
+                  "    const json = pm.response.json();",
+                  "    const shards = new Set(json.data.customers.map(c => c.shard));",
+                  "    pm.expect(json.data.customers).to.have.lengthOf(9);",
+                  "    pm.expect([...shards].sort()).to.eql([0, 1, 2]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "customer by email - one shard, with parcels",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/graphql",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"{ customer(email: \\\"anna@example.com\\\") { name city shard parcels { description weightKg status } } }\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Returns Anna with her 2 parcels\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.data.customer.name).to.eql('Anna Jensen');",
+                  "    pm.expect(json.data.customer.parcels).to.have.lengthOf(2);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "customer - only the fields we ask for",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/graphql",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"{ customer(email: \\\"bo@example.com\\\") { name } }\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"No overfetching: only 'name' is returned\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(Object.keys(json.data.customer)).to.eql(['name']);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "unknown customer (negative)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/graphql",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"{ customer(email: \\\"nobody@example.com\\\") { name } }\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Returns null\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.data.customer).to.be.null;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "SQL injection attempt (negative)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/graphql",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"query ($email: String!) { customer(email: $email) { name } }\",\n  \"variables\": {\n    \"email\": \"' OR '1'='1\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Injection is treated as plain text: nothing found\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.data.customer).to.be.null;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "unknown field (negative)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/graphql",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"{ customers { password } }\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Schema validation error\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.errors[0].extensions.classification).to.eql('ValidationError');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Authentication",
+      "item": [
+        {
+          "name": "registerCustomer without token (negative)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/graphql",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"mutation ($name: String!, $email: String!, $city: String!) { registerCustomer(name: $name, email: $email, city: $city) { id shard email name city } }\",\n  \"variables\": {\n    \"name\": \"X\",\n    \"email\": \"x@example.com\",\n    \"city\": \"Y\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Error is UNAUTHORIZED\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.errors[0].extensions.classification).to.eql('UNAUTHORIZED');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "login with wrong password (negative)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/graphql",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"mutation { login(username: \\\"dispatcher\\\", password: \\\"wrong\\\") }\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Error is UNAUTHORIZED\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.errors[0].extensions.classification).to.eql('UNAUTHORIZED');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "login (positive)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/graphql",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"mutation { login(username: \\\"dispatcher\\\", password: \\\"password123\\\") }\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Returns a bearer token\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.data.login).to.be.a('string').with.lengthOf(43);",
+                  "    pm.collectionVariables.set('token', json.data.login);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Mutations (authenticated)",
+      "item": [
+        {
+          "name": "registerCustomer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/graphql",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"mutation ($name: String!, $email: String!, $city: String!) { registerCustomer(name: $name, email: $email, city: $city) { id shard email name city } }\",\n  \"variables\": {\n    \"name\": \"Jonas Olsen\",\n    \"email\": \"Jonas@Example.com\",\n    \"city\": \"Vejle\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Customer is stored in the shard chosen by the hash\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.data.registerCustomer.email).to.eql('jonas@example.com');",
+                  "    pm.expect(json.data.registerCustomer.shard).to.eql(2);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "registerCustomer - same email again (negative)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/graphql",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"mutation ($name: String!, $email: String!, $city: String!) { registerCustomer(name: $name, email: $email, city: $city) { id shard email name city } }\",\n  \"variables\": {\n    \"name\": \"Jonas Olsen\",\n    \"email\": \"jonas@example.com\",\n    \"city\": \"Vejle\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Error is BAD_REQUEST\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.errors[0].extensions.classification).to.eql('BAD_REQUEST');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "registerCustomer - invalid email (negative)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/graphql",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"mutation ($name: String!, $email: String!, $city: String!) { registerCustomer(name: $name, email: $email, city: $city) { id shard email name city } }\",\n  \"variables\": {\n    \"name\": \"A\",\n    \"email\": \"not-an-email\",\n    \"city\": \"B\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Error is BAD_REQUEST\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.errors[0].extensions.classification).to.eql('BAD_REQUEST');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "registerCustomer - XSS attempt",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/graphql",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"mutation ($name: String!, $email: String!, $city: String!) { registerCustomer(name: $name, email: $email, city: $city) { id shard email name city } }\",\n  \"variables\": {\n    \"name\": \"<script>alert(1)</script>\",\n    \"email\": \"xss@example.com\",\n    \"city\": \"Odense\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"HTML is escaped\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.data.registerCustomer.name).to.eql('&lt;script&gt;alert(1)&lt;/script&gt;');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "createParcel",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/graphql",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"mutation ($email: String!, $weight: Float!) { createParcel(customerEmail: $email, description: \\\"Desk lamp\\\", weightKg: $weight) { id description weightKg status } }\",\n  \"variables\": {\n    \"email\": \"jonas@example.com\",\n    \"weight\": 3.2\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Parcel is created\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.data.createParcel.status).to.eql('REGISTERED');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "createParcel - unknown customer (negative)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/graphql",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"mutation ($email: String!, $weight: Float!) { createParcel(customerEmail: $email, description: \\\"Desk lamp\\\", weightKg: $weight) { id description weightKg status } }\",\n  \"variables\": {\n    \"email\": \"ghost@example.com\",\n    \"weight\": 3.2\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Error is NOT_FOUND\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.errors[0].extensions.classification).to.eql('NOT_FOUND');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "createParcel - negative weight (negative)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/graphql",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"mutation ($email: String!, $weight: Float!) { createParcel(customerEmail: $email, description: \\\"Desk lamp\\\", weightKg: $weight) { id description weightKg status } }\",\n  \"variables\": {\n    \"email\": \"jonas@example.com\",\n    \"weight\": -1\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Error is BAD_REQUEST\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.errors[0].extensions.classification).to.eql('BAD_REQUEST');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "customer - read back from its shard",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/graphql",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"{ customer(email: \\\"jonas@example.com\\\") { shard parcels { description } } }\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Read is routed to the same shard as the write\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.data.customer.shard).to.eql(2);",
+                  "    pm.expect(json.data.customer.parcels[0].description).to.eql('Desk lamp');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. ETL",
+      "item": [
+        {
+          "name": "runEtl - first run",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/graphql",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"mutation { runEtl { customersExtracted parcelsExtracted warehouseCustomers warehouseParcels } }\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Everything from the shards is in the warehouse\", function () {",
+                  "    const json = pm.response.json();",
+                  "    const r = json.data.runEtl;",
+                  "    pm.expect(r.warehouseCustomers).to.eql(r.customersExtracted);",
+                  "    pm.expect(r.warehouseParcels).to.eql(r.parcelsExtracted);",
+                  "    pm.collectionVariables.set('warehouseCustomers', r.warehouseCustomers);",
+                  "    pm.collectionVariables.set('warehouseParcels', r.warehouseParcels);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "runEtl - second run creates no duplicates",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/graphql",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"mutation { runEtl { customersExtracted parcelsExtracted warehouseCustomers warehouseParcels } }\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Warehouse counts did not change\", function () {",
+                  "    const json = pm.response.json();",
+                  "    const r = json.data.runEtl;",
+                  "    pm.expect(r.warehouseCustomers).to.eql(Number(pm.collectionVariables.get('warehouseCustomers')));",
+                  "    pm.expect(r.warehouseParcels).to.eql(Number(pm.collectionVariables.get('warehouseParcels')));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Logout",
+      "item": [
+        {
+          "name": "logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/graphql",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"mutation { logout }\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Returns true\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.data.logout).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "use token after logout (negative)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/graphql",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"mutation { runEtl { customersExtracted parcelsExtracted warehouseCustomers warehouseParcels } }\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Error is UNAUTHORIZED\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.errors[0].extensions.classification).to.eql('UNAUTHORIZED');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "logout without valid token (negative)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/graphql",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"mutation { logout }\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Error is UNAUTHORIZED\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.errors[0].extensions.classification).to.eql('UNAUTHORIZED');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8083"
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "warehouseCustomers",
+      "value": ""
+    },
+    {
+      "key": "warehouseParcels",
+      "value": ""
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  }
+}

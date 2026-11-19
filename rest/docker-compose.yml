@@ -1,0 +1,7 @@
+# Redis: the key-value store that holds revoked JWT ids.
+# It is separate from the API's SQL database (H2).
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"

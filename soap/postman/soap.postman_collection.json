@@ -1,0 +1,648 @@
+{
+  "info": {
+    "_postman_id": "523cdb40-41d1-5309-aff4-9a0030879623",
+    "name": "Delivery SOAP API",
+    "description": "Pickup point SOAP service. Start the API first (port 8082), then run the folders in order. No login is needed.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. WSDL",
+      "item": [
+        {
+          "name": "Get the generated WSDL",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/services/pickup-points?wsdl",
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Has the main WSDL parts\", function () {",
+                  "    const xml = pm.response.text();",
+                  "    pm.expect(xml).to.include('<wsdl:types>');",
+                  "    pm.expect(xml).to.include('<wsdl:portType name=\"PickupPointPort\">');",
+                  "    pm.expect(xml).to.include('<wsdl:binding name=\"PickupPointServiceSoapBinding\"');",
+                  "    pm.expect(xml).to.include('<wsdl:service name=\"PickupPointService\">');",
+                  "});",
+                  "pm.test(\"Has the 4 operations\", function () {",
+                  "    const xml = pm.response.text();",
+                  "    pm.expect(xml).to.include('<wsdl:operation name=\"getPickupPoint\">');",
+                  "    pm.expect(xml).to.include('<wsdl:operation name=\"findPickupPointsByCity\">');",
+                  "    pm.expect(xml).to.include('<wsdl:operation name=\"reserveLocker\">');",
+                  "    pm.expect(xml).to.include('<wsdl:operation name=\"cancelReservation\">');",
+                  "});",
+                  "pm.test(\"Has the 3 faults\", function () {",
+                  "    const xml = pm.response.text();",
+                  "    pm.expect(xml).to.include('name=\"NotFoundFault\"');",
+                  "    pm.expect(xml).to.include('name=\"InvalidInputFault\"');",
+                  "    pm.expect(xml).to.include('name=\"PickupPointFullFault\"');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Read operations",
+      "item": [
+        {
+          "name": "getPickupPoint (positive)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/xml"
+              }
+            ],
+            "url": "{{baseUrl}}/services/pickup-points",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"\n                  xmlns:pic=\"http://delivery.ek.dk/pickup\">\n  <soapenv:Header/>\n  <soapenv:Body>\n    <pic:getPickupPoint><id>1</id></pic:getPickupPoint>\n  </soapenv:Body>\n</soapenv:Envelope>",
+              "options": {
+                "raw": {
+                  "language": "xml"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Is not a fault\", function () {",
+                  "    const xml = pm.response.text();",
+                  "    pm.expect(xml).to.not.include('<soap:Fault>');",
+                  "});",
+                  "pm.test(\"Returns pickup point 1\", function () {",
+                  "    const xml = pm.response.text();",
+                  "    pm.expect(xml).to.include('<ns2:getPickupPointResponse');",
+                  "    pm.expect(xml).to.include('<id>1</id>');",
+                  "    pm.expect(xml).to.include('<name>Norreport Lockers</name>');",
+                  "    pm.expect(xml).to.include('<capacity>3</capacity>');",
+                  "    pm.expect(xml).to.include('<freeLockers>2</freeLockers>');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "getPickupPoint - unknown id (negative, NotFoundFault)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/xml"
+              }
+            ],
+            "url": "{{baseUrl}}/services/pickup-points",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"\n                  xmlns:pic=\"http://delivery.ek.dk/pickup\">\n  <soapenv:Header/>\n  <soapenv:Body>\n    <pic:getPickupPoint><id>99</id></pic:getPickupPoint>\n  </soapenv:Body>\n</soapenv:Envelope>",
+              "options": {
+                "raw": {
+                  "language": "xml"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 500\", function () {",
+                  "    pm.response.to.have.status(500);",
+                  "});",
+                  "pm.test(\"Is a SOAP fault: NotFoundFault\", function () {",
+                  "    const xml = pm.response.text();",
+                  "    pm.expect(xml).to.include('<soap:Fault>');",
+                  "    pm.expect(xml).to.include('<faultstring>Pickup point 99 not found</faultstring>');",
+                  "    pm.expect(xml).to.include('<ns1:NotFoundFault ');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "getPickupPoint - id is not a number (negative)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/xml"
+              }
+            ],
+            "url": "{{baseUrl}}/services/pickup-points",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"\n                  xmlns:pic=\"http://delivery.ek.dk/pickup\">\n  <soapenv:Header/>\n  <soapenv:Body>\n    <pic:getPickupPoint><id>abc</id></pic:getPickupPoint>\n  </soapenv:Body>\n</soapenv:Envelope>",
+              "options": {
+                "raw": {
+                  "language": "xml"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 500\", function () {",
+                  "    pm.response.to.have.status(500);",
+                  "});",
+                  "pm.test(\"CXF rejects the XML with a Client fault\", function () {",
+                  "    const xml = pm.response.text();",
+                  "    pm.expect(xml).to.include('<soap:Fault>');",
+                  "    pm.expect(xml).to.include('<faultcode>soap:Client</faultcode>');",
+                  "    pm.expect(xml).to.include('Unmarshalling Error');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "findPickupPointsByCity (positive)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/xml"
+              }
+            ],
+            "url": "{{baseUrl}}/services/pickup-points",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"\n                  xmlns:pic=\"http://delivery.ek.dk/pickup\">\n  <soapenv:Header/>\n  <soapenv:Body>\n    <pic:findPickupPointsByCity><city>copenhagen</city></pic:findPickupPointsByCity>\n  </soapenv:Body>\n</soapenv:Envelope>",
+              "options": {
+                "raw": {
+                  "language": "xml"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Is not a fault\", function () {",
+                  "    const xml = pm.response.text();",
+                  "    pm.expect(xml).to.not.include('<soap:Fault>');",
+                  "});",
+                  "pm.test(\"Returns the Copenhagen pickup points\", function () {",
+                  "    const xml = pm.response.text();",
+                  "    pm.expect(xml).to.include('<name>Norreport Lockers</name>');",
+                  "    pm.expect(xml).to.include('<name>Amager Kiosk</name>');",
+                  "});",
+                  "pm.test(\"Returns exactly 2 pickup points\", function () {",
+                  "    const xml = pm.response.text();",
+                  "    pm.expect(xml.split('<pickupPoint>').length - 1).to.eql(2);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "findPickupPointsByCity - XSS attempt (negative, InvalidInputFault)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/xml"
+              }
+            ],
+            "url": "{{baseUrl}}/services/pickup-points",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"\n                  xmlns:pic=\"http://delivery.ek.dk/pickup\">\n  <soapenv:Header/>\n  <soapenv:Body>\n    <pic:findPickupPointsByCity><city>&lt;script&gt;alert(1)&lt;/script&gt;</city></pic:findPickupPointsByCity>\n  </soapenv:Body>\n</soapenv:Envelope>",
+              "options": {
+                "raw": {
+                  "language": "xml"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 500\", function () {",
+                  "    pm.response.to.have.status(500);",
+                  "});",
+                  "pm.test(\"Is a SOAP fault: InvalidInputFault\", function () {",
+                  "    const xml = pm.response.text();",
+                  "    pm.expect(xml).to.include('<soap:Fault>');",
+                  "    pm.expect(xml).to.include('<faultstring>city must be 1-50 letters</faultstring>');",
+                  "    pm.expect(xml).to.include('<ns1:InvalidInputFault ');",
+                  "});",
+                  "pm.test(\"The script is not echoed back\", function () {",
+                  "    const xml = pm.response.text();",
+                  "    pm.expect(xml).to.not.include('script');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Change operations",
+      "item": [
+        {
+          "name": "reserveLocker (positive)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/xml"
+              }
+            ],
+            "url": "{{baseUrl}}/services/pickup-points",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"\n                  xmlns:pic=\"http://delivery.ek.dk/pickup\">\n  <soapenv:Header/>\n  <soapenv:Body>\n    <pic:reserveLocker><pickupPointId>2</pickupPointId><trackingNumber>DK-555555</trackingNumber></pic:reserveLocker>\n  </soapenv:Body>\n</soapenv:Envelope>",
+              "options": {
+                "raw": {
+                  "language": "xml"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Is not a fault\", function () {",
+                  "    const xml = pm.response.text();",
+                  "    pm.expect(xml).to.not.include('<soap:Fault>');",
+                  "});",
+                  "pm.test(\"Returns an ACTIVE reservation\", function () {",
+                  "    const xml = pm.response.text();",
+                  "    pm.expect(xml).to.include('<pickupPointId>2</pickupPointId>');",
+                  "    pm.expect(xml).to.include('<trackingNumber>DK-555555</trackingNumber>');",
+                  "    pm.expect(xml).to.include('<status>ACTIVE</status>');",
+                  "});",
+                  "pm.test(\"Save the new reservation id\", function () {",
+                  "    const xml = pm.response.text();",
+                  "    const id = xml.match(/<reservation><id>(\\d+)<\\/id>/)[1];",
+                  "    pm.collectionVariables.set('reservationId', id);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "getPickupPoint - one locker less after the reservation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/xml"
+              }
+            ],
+            "url": "{{baseUrl}}/services/pickup-points",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"\n                  xmlns:pic=\"http://delivery.ek.dk/pickup\">\n  <soapenv:Header/>\n  <soapenv:Body>\n    <pic:getPickupPoint><id>2</id></pic:getPickupPoint>\n  </soapenv:Body>\n</soapenv:Envelope>",
+              "options": {
+                "raw": {
+                  "language": "xml"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Free lockers went from 2 to 1\", function () {",
+                  "    const xml = pm.response.text();",
+                  "    pm.expect(xml).to.include('<capacity>2</capacity>');",
+                  "    pm.expect(xml).to.include('<freeLockers>1</freeLockers>');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "reserveLocker - pickup point is full (negative, PickupPointFullFault)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/xml"
+              }
+            ],
+            "url": "{{baseUrl}}/services/pickup-points",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"\n                  xmlns:pic=\"http://delivery.ek.dk/pickup\">\n  <soapenv:Header/>\n  <soapenv:Body>\n    <pic:reserveLocker><pickupPointId>4</pickupPointId><trackingNumber>DK-555556</trackingNumber></pic:reserveLocker>\n  </soapenv:Body>\n</soapenv:Envelope>",
+              "options": {
+                "raw": {
+                  "language": "xml"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 500\", function () {",
+                  "    pm.response.to.have.status(500);",
+                  "});",
+                  "pm.test(\"Is a SOAP fault: PickupPointFullFault\", function () {",
+                  "    const xml = pm.response.text();",
+                  "    pm.expect(xml).to.include('<soap:Fault>');",
+                  "    pm.expect(xml).to.include('<faultstring>Pickup point 4 has no free lockers</faultstring>');",
+                  "    pm.expect(xml).to.include('<ns1:PickupPointFullFault ');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "reserveLocker - SQL injection attempt (negative, InvalidInputFault)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/xml"
+              }
+            ],
+            "url": "{{baseUrl}}/services/pickup-points",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"\n                  xmlns:pic=\"http://delivery.ek.dk/pickup\">\n  <soapenv:Header/>\n  <soapenv:Body>\n    <pic:reserveLocker><pickupPointId>2</pickupPointId><trackingNumber>x' OR '1'='1</trackingNumber></pic:reserveLocker>\n  </soapenv:Body>\n</soapenv:Envelope>",
+              "options": {
+                "raw": {
+                  "language": "xml"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 500\", function () {",
+                  "    pm.response.to.have.status(500);",
+                  "});",
+                  "pm.test(\"Is a SOAP fault: InvalidInputFault\", function () {",
+                  "    const xml = pm.response.text();",
+                  "    pm.expect(xml).to.include('<soap:Fault>');",
+                  "    pm.expect(xml).to.include('<faultstring>trackingNumber must be 6-20 characters: A-Z, 0-9 or -</faultstring>');",
+                  "    pm.expect(xml).to.include('<ns1:InvalidInputFault ');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "reserveLocker - unknown pickup point (negative, NotFoundFault)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/xml"
+              }
+            ],
+            "url": "{{baseUrl}}/services/pickup-points",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"\n                  xmlns:pic=\"http://delivery.ek.dk/pickup\">\n  <soapenv:Header/>\n  <soapenv:Body>\n    <pic:reserveLocker><pickupPointId>99</pickupPointId><trackingNumber>DK-555557</trackingNumber></pic:reserveLocker>\n  </soapenv:Body>\n</soapenv:Envelope>",
+              "options": {
+                "raw": {
+                  "language": "xml"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 500\", function () {",
+                  "    pm.response.to.have.status(500);",
+                  "});",
+                  "pm.test(\"Is a SOAP fault: NotFoundFault\", function () {",
+                  "    const xml = pm.response.text();",
+                  "    pm.expect(xml).to.include('<soap:Fault>');",
+                  "    pm.expect(xml).to.include('<faultstring>Pickup point 99 not found</faultstring>');",
+                  "    pm.expect(xml).to.include('<ns1:NotFoundFault ');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "cancelReservation (positive)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/xml"
+              }
+            ],
+            "url": "{{baseUrl}}/services/pickup-points",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"\n                  xmlns:pic=\"http://delivery.ek.dk/pickup\">\n  <soapenv:Header/>\n  <soapenv:Body>\n    <pic:cancelReservation><reservationId>{{reservationId}}</reservationId></pic:cancelReservation>\n  </soapenv:Body>\n</soapenv:Envelope>",
+              "options": {
+                "raw": {
+                  "language": "xml"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Is not a fault\", function () {",
+                  "    const xml = pm.response.text();",
+                  "    pm.expect(xml).to.not.include('<soap:Fault>');",
+                  "});",
+                  "pm.test(\"Reservation is now CANCELLED\", function () {",
+                  "    const xml = pm.response.text();",
+                  "    pm.expect(xml).to.include('<status>CANCELLED</status>');",
+                  "    pm.expect(xml).to.include('<trackingNumber>DK-555555</trackingNumber>');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "cancelReservation - cancel the same one twice (negative, NotFoundFault)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/xml"
+              }
+            ],
+            "url": "{{baseUrl}}/services/pickup-points",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"\n                  xmlns:pic=\"http://delivery.ek.dk/pickup\">\n  <soapenv:Header/>\n  <soapenv:Body>\n    <pic:cancelReservation><reservationId>{{reservationId}}</reservationId></pic:cancelReservation>\n  </soapenv:Body>\n</soapenv:Envelope>",
+              "options": {
+                "raw": {
+                  "language": "xml"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 500\", function () {",
+                  "    pm.response.to.have.status(500);",
+                  "});",
+                  "pm.test(\"Is a SOAP fault: NotFoundFault\", function () {",
+                  "    const xml = pm.response.text();",
+                  "    pm.expect(xml).to.include('<soap:Fault>');",
+                  "    pm.expect(xml).to.include('<faultstring>Active reservation ');",
+                  "    pm.expect(xml).to.include('<ns1:NotFoundFault ');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8082"
+    },
+    {
+      "key": "reservationId",
+      "value": ""
+    }
+  ]
+}
